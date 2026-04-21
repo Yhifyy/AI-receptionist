@@ -1,0 +1,466 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Industry {
+  RESTAURANT
+  SALON
+  HOTEL
+  RETAIL
+}
+
+enum Plan {
+  STARTER
+  GROWTH
+  PRO
+  ENTERPRISE
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  BUSY
+}
+
+enum CallOutcome {
+  BOOKING_MADE
+  BOOKING_MODIFIED
+  BOOKING_CANCELLED
+  INQUIRY_RESOLVED
+  TRANSFERRED_TO_HUMAN
+  VOICEMAIL
+  ABANDONED
+  OTHER
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum ActionType {
+  BOOKING_CREATED
+  BOOKING_MODIFIED
+  BOOKING_CANCELLED
+  MENU_INQUIRY
+  TRANSFER_REQUESTED
+  UPSELL_OFFERED
+  UPSELL_ACCEPTED
+  CALLBACK_SCHEDULED
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model Tenant {
+  id               String   @id @default(uuid())
+  name             String
+  industry         Industry
+  subdomain        String   @unique
+  twilioNumber     String?
+  twilioNumberSid  String?
+  stripeCustomerId String?
+  plan             Plan     @default(STARTER)
+  isActive         Boolean  @default(true)
+  
+  // Business configuration
+  config           Json     @default("{}")
+  timezone         String   @default("America/New_York")
+  
+  // Voice settings
+  voiceId          String?  // ElevenLabs voice ID
+  voiceName        String?
+  
+  // Operating hours (stored as JSON)
+  operatingHours   Json     @default("{}")
+  
+  // Usage tracking
+  minutesUsed      Int      @default(0)
+  minutesIncluded  Int      @default(500)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  users            User[]
+  calls            Call[]
+  customers        Customer[]
+  bookings         Booking[]
+  menuItems        MenuItem[]
+  prompts          CustomPrompt[]
+  abTests          ABTest[]
+  webhooks         Webhook[]
+
+  @@index([subdomain])
+  @@index([stripeCustomerId])
+}
+
+model User {
+  id            String   @id @default(uuid())
+  tenantId      String
+  email         String
+  passwordHash  String
+  name          String
+  role          UserRole @default(STAFF)
+  isActive      Boolean  @default(true)
+  
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([email])
+}
+
+model Customer {
+  id              String   @id @default(uuid())
+  tenantId        String
+  phone           String
+  name            String?
+  email           String?
+  isVip           Boolean  @default(false)
+  
+  // Customer insights
+  preferences     Json     @default("{}")
+  notes           String?
+  tags            String[] @default([])
+  
+  // Metrics
+  lifetimeValue   Decimal  @default(0) @db.Decimal(10, 2)
+  callCount       Int      @default(0)
+  bookingCount    Int      @default(0)
+  lastCallAt      DateTime?
+  
+  // Sentiment tracking
+  avgSentiment    Float?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls           Call[]
+  bookings        Booking[]
+  memoryEmbeddings CustomerMemory[]
+
+  @@unique([tenantId, phone])
+  @@index([phone])
+  @@index([tenantId, isVip])
+}
+
+model Call {
+  id              String      @id @default(uuid())
+  tenantId        String
+  customerId      String?
+  
+  // Twilio identifiers
+  twilioCallSid   String      @unique
+  twilioRecordingSid String?
+  
+  // Call metadata
+  direction       CallDirection
+  status          CallStatus
+  fromNumber      String
+  toNumber        String
+  
+  // Timing
+  startedAt       DateTime    @default(now())
+  answeredAt      DateTime?
+  endedAt         DateTime?
+  duration        Int?        // in seconds
+  
+  // Conversation data
+  transcript      Json?       // Full conversation transcript
+  summary         String?     // AI-generated summary
+  intents         Json?       // Detected intents with confidence
+  
+  // Analysis
+  sentiment       Float?      // -1 to 1 scale
+  outcome         CallOutcome?
+  
+  // Revenue tracking
+  revenueImpact   Decimal?    @db.Decimal(10, 2)
+  
+  // Recordings
+  recordingUrl    String?
+  recordingDuration Int?
+  
+  // A/B testing
+  promptVersion   String?
+  abTestId        String?
+  
+  // Flags
+  wasTransferred  Boolean     @default(false)
+  hadError        Boolean     @default(false)
+  errorMessage    String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  actions         CallAction[]
+  abTest          ABTest?     @relation(fields: [abTestId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([twilioCallSid])
+  @@index([customerId])
+  @@index([status])
+}
+
+model CallAction {
+  id          String     @id @default(uuid())
+  callId      String
+  type        ActionType
+  data        Json       @default("{}")
+  success     Boolean    @default(true)
+  timestamp   DateTime   @default(now())
+
+  call        Call       @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([type])
+}
+
+// ============================================
+// RESTAURANT MODULE
+// ============================================
+
+model Booking {
+  id              String    @id @default(uuid())
+  tenantId        String
+  customerId      String?
+  callId          String?
+  
+  // Booking details
+  date            DateTime  @db.Date
+  time            String    // "19:00" format
+  partySize       Int
+  tableNumber     String?
+  
+  // Customer info (can be captured even without customer record)
+  guestName       String
+  guestPhone      String
+  guestEmail      String?
+  
+  // Special requests
+  specialRequests String?
+  occasion        String?   // birthday, anniversary, etc.
+  
+  // Status
+  status          String    @default("confirmed") // confirmed, cancelled, completed, no_show
+  confirmedAt     DateTime?
+  cancelledAt     DateTime?
+  
+  // Reminders
+  reminder24hSent Boolean   @default(false)
+  reminder2hSent  Boolean   @default(false)
+  
+  // Revenue
+  estimatedValue  Decimal?  @db.Decimal(10, 2)
+  actualValue     Decimal?  @db.Decimal(10, 2)
+  
+  // External reference
+  externalId      String?   // ID in external booking system
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer        Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, date])
+  @@index([customerId])
+  @@index([status])
+}
+
+model MenuItem {
+  id              String   @id @default(uuid())
+  tenantId        String
+  
+  name            String
+  description     String?
+  category        String   // appetizer, main, dessert, drink, etc.
+  price           Decimal  @db.Decimal(10, 2)
+  
+  // Dietary info
+  allergens       String[] @default([])
+  isVegetarian    Boolean  @default(false)
+  isVegan         Boolean  @default(false)
+  isGlutenFree    Boolean  @default(false)
+  
+  // Availability
+  isAvailable     Boolean  @default(true)
+  availableDays   String[] @default([]) // empty = all days
+  
+  // For recommendations
+  isPopular       Boolean  @default(false)
+  isChefSpecial   Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, category])
+  @@index([tenantId, isAvailable])
+}
+
+// ============================================
+// AI & PROMPTS
+// ============================================
+
+model CustomPrompt {
+  id          String   @id @default(uuid())
+  tenantId    String
+  
+  name        String
+  type        String   // greeting, booking, menu_qa, upsell, closing, etc.
+  content     String   @db.Text
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  
+  // Performance metrics
+  usageCount  Int      @default(0)
+  successRate Float?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name, version])
+  @@index([tenantId, type])
+}
+
+model CustomerMemory {
+  id          String   @id @default(uuid())
+  customerId  String
+  
+  // Memory content
+  content     String   @db.Text
+  type        String   // preference, interaction, feedback, etc.
+  
+  // Vector embedding (stored in Pinecone, reference here)
+  embeddingId String?
+  
+  // Relevance
+  importance  Float    @default(0.5) // 0-1 scale
+  
+  createdAt   DateTime @default(now())
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([type])
+}
+
+// ============================================
+// A/B TESTING
+// ============================================
+
+model ABTest {
+  id              String    @id @default(uuid())
+  tenantId        String
+  
+  name            String
+  description     String?
+  
+  // Test configuration
+  variantA        Json      // Original prompt/config
+  variantB        Json      // Test variant
+  trafficSplit    Float     @default(0.5) // 0-1, percentage going to variant B
+  
+  // Metrics
+  variantACalls   Int       @default(0)
+  variantBCalls   Int       @default(0)
+  variantASuccess Int       @default(0)
+  variantBSuccess Int       @default(0)
+  
+  // Status
+  status          String    @default("draft") // draft, running, completed, archived
+  startedAt       DateTime?
+  endedAt         DateTime?
+  winner          String?   // "A" or "B"
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls           Call[]
+
+  @@index([tenantId, status])
+}
+
+// ============================================
+// INTEGRATIONS
+// ============================================
+
+model Webhook {
+  id          String   @id @default(uuid())
+  tenantId    String
+  
+  name        String
+  url         String
+  events      String[] // call.started, call.completed, booking.created, etc.
+  secret      String   // For signature verification
+  isActive    Boolean  @default(true)
+  
+  // Stats
+  lastTriggeredAt DateTime?
+  failureCount    Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// ============================================
+// BILLING
+// ============================================
+
+model UsageRecord {
+  id          String   @id @default(uuid())
+  tenantId    String
+  
+  // Period
+  periodStart DateTime
+  periodEnd   DateTime
+  
+  // Usage
+  callMinutes Int      @default(0)
+  callCount   Int      @default(0)
+  
+  // Billing
+  stripeUsageRecordId String?
+  billed      Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, periodStart])
+  @@index([tenantId])
+}

@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: voicedesk-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: voicedesk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: voicedesk-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: voicedesk-n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=voicedesk123
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/New_York
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - postgres
+      - redis
+
+  # API Server (development)
+  api:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.api
+    container_name: voicedesk-api
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/voicedesk?schema=public
+      - REDIS_URL=redis://redis:6379
+      - API_PORT=3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: pnpm --filter @voicedesk/api dev
+
+  # Dashboard (development)
+  dashboard:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.dashboard
+    container_name: voicedesk-dashboard
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/dashboard:/app/apps/dashboard
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/dashboard/node_modules
+    depends_on:
+      - api
+    command: pnpm --filter @voicedesk/dashboard dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+
+networks:
+  default:
+    name: voicedesk-network

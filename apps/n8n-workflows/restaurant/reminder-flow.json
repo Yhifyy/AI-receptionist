@@ -1,0 +1,263 @@
+{
+  "name": "Booking Reminder Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Hourly Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.API_URL }}/api/internal/bookings/upcoming-reminders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-upcoming",
+      "name": "Get Upcoming Bookings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "internal-api-key",
+          "name": "Internal API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-bookings",
+      "name": "Split Bookings",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const booking = $input.item.json;\nconst now = new Date();\nconst bookingTime = new Date(`${booking.date}T${booking.time}`);\nconst hoursUntil = (bookingTime - now) / (1000 * 60 * 60);\n\nlet reminderType = null;\n\n// 24-hour reminder\nif (hoursUntil >= 23 && hoursUntil <= 25 && !booking.reminder24hSent) {\n  reminderType = '24h';\n}\n// 2-hour reminder\nelse if (hoursUntil >= 1.5 && hoursUntil <= 2.5 && !booking.reminder2hSent) {\n  reminderType = '2h';\n}\n\nif (reminderType) {\n  return {\n    ...booking,\n    reminderType,\n    hoursUntil: Math.round(hoursUntil)\n  };\n}\n\nreturn null;"
+      },
+      "id": "check-reminder-type",
+      "name": "Check Reminder Type",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json !== null }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "needs-reminder",
+      "name": "Needs Reminder?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const booking = $input.item.json;\nlet message = '';\n\nif (booking.reminderType === '24h') {\n  message = `Reminder: Your reservation for ${booking.partySize} guests is tomorrow at ${booking.time}. ` +\n    `Reply CANCEL to cancel or call us to modify.`;\n} else {\n  message = `Your table for ${booking.partySize} is ready in 2 hours at ${booking.time}! ` +\n    `See you soon.`;\n}\n\nreturn {\n  ...booking,\n  reminderMessage: message\n};"
+      },
+      "id": "format-reminder",
+      "name": "Format Reminder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_PHONE_NUMBER }}",
+        "to": "={{ $json.guestPhone }}",
+        "message": "={{ $json.reminderMessage }}"
+      },
+      "id": "send-reminder-sms",
+      "name": "Send Reminder SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [1450, 200],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilio-creds",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_URL }}/webhooks/n8n/{{ $json.tenantId }}/reminder-sent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "bookingId",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "reminderType",
+              "value": "={{ $json.reminderType }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-reminder-status",
+      "name": "Update Reminder Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "internal-api-key",
+          "name": "Internal API Key"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "loop-back",
+      "name": "Continue Loop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    }
+  ],
+  "connections": {
+    "Hourly Check": {
+      "main": [
+        [
+          {
+            "node": "Get Upcoming Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Upcoming Bookings": {
+      "main": [
+        [
+          {
+            "node": "Split Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Bookings": {
+      "main": [
+        [
+          {
+            "node": "Check Reminder Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Reminder Type": {
+      "main": [
+        [
+          {
+            "node": "Needs Reminder?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Reminder?": {
+      "main": [
+        [
+          {
+            "node": "Format Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continue Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reminder SMS": {
+      "main": [
+        [
+          {
+            "node": "Update Reminder Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Reminder Status": {
+      "main": [
+        [
+          {
+            "node": "Split Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Loop": {
+      "main": [
+        [
+          {
+            "node": "Split Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

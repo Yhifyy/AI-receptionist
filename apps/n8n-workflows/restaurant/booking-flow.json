@@ -1,0 +1,267 @@
+{
+  "name": "Restaurant Booking Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "booking-created",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Booking Created Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const booking = $input.item.json;\n\n// Format booking details\nconst date = new Date(booking.date);\nconst formattedDate = date.toLocaleDateString('en-US', {\n  weekday: 'long',\n  month: 'long',\n  day: 'numeric',\n  year: 'numeric'\n});\n\n// Generate confirmation message\nconst message = `Your reservation at ${booking.businessName || 'our restaurant'} is confirmed!\\n\\n` +\n  `📅 Date: ${formattedDate}\\n` +\n  `⏰ Time: ${booking.time}\\n` +\n  `👥 Party Size: ${booking.partySize}\\n` +\n  `📋 Name: ${booking.guestName}\\n\\n` +\n  `We look forward to seeing you!`;\n\nreturn {\n  ...booking,\n  formattedDate,\n  confirmationMessage: message\n};"
+      },
+      "id": "format-booking",
+      "name": "Format Booking",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.guestPhone }}",
+              "value2": ""
+            }
+          ]
+        }
+      },
+      "id": "check-phone",
+      "name": "Has Phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_PHONE_NUMBER }}",
+        "to": "={{ $json.guestPhone }}",
+        "message": "={{ $json.confirmationMessage }}"
+      },
+      "id": "send-sms",
+      "name": "Send SMS Confirmation",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilio-creds",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.guestEmail }}",
+              "value2": ""
+            }
+          ]
+        }
+      },
+      "id": "check-email",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "reservations@voicedesk.ai",
+        "toEmail": "={{ $json.guestEmail }}",
+        "subject": "Reservation Confirmed - {{ $json.formattedDate }}",
+        "emailType": "html",
+        "message": "<h2>Your Reservation is Confirmed!</h2>\n<p>Thank you for your reservation.</p>\n<table style=\"border-collapse: collapse; margin: 20px 0;\">\n  <tr><td style=\"padding: 8px; border: 1px solid #ddd;\"><strong>Date:</strong></td><td style=\"padding: 8px; border: 1px solid #ddd;\">{{ $json.formattedDate }}</td></tr>\n  <tr><td style=\"padding: 8px; border: 1px solid #ddd;\"><strong>Time:</strong></td><td style=\"padding: 8px; border: 1px solid #ddd;\">{{ $json.time }}</td></tr>\n  <tr><td style=\"padding: 8px; border: 1px solid #ddd;\"><strong>Party Size:</strong></td><td style=\"padding: 8px; border: 1px solid #ddd;\">{{ $json.partySize }} guests</td></tr>\n  <tr><td style=\"padding: 8px; border: 1px solid #ddd;\"><strong>Name:</strong></td><td style=\"padding: 8px; border: 1px solid #ddd;\">{{ $json.guestName }}</td></tr>\n</table>\n<p>We look forward to seeing you!</p>"
+      },
+      "id": "send-email",
+      "name": "Send Email Confirmation",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.calendarIntegration }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-calendar",
+      "name": "Calendar Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $json.calendarId || 'primary' }}",
+          "mode": "id"
+        },
+        "start": "={{ $json.date }}T{{ $json.time }}:00",
+        "end": "={{ new Date(new Date($json.date + 'T' + $json.time + ':00').getTime() + 90*60000).toISOString() }}",
+        "additionalFields": {
+          "summary": "Reservation: {{ $json.guestName }} ({{ $json.partySize }})",
+          "description": "Phone: {{ $json.guestPhone }}\nSpecial Requests: {{ $json.specialRequests || 'None' }}"
+        }
+      },
+      "id": "create-calendar-event",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-creds",
+          "name": "Google Calendar"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, bookingId: $json.bookingId }) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Booking Created Webhook": {
+      "main": [
+        [
+          {
+            "node": "Format Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Booking": {
+      "main": [
+        [
+          {
+            "node": "Has Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Phone?": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Calendar Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Email?": {
+      "main": [
+        [
+          {
+            "node": "Send Email Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
