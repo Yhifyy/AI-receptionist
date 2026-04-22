@@ -26,7 +26,17 @@ ChartJS.register(
 export function CallVolumeChart() {
   const { data, isLoading } = useQuery({
     queryKey: ['analytics', 'trends'],
-    queryFn: () => api.get('/analytics/trends/daily?period=7'),
+    queryFn: () =>
+      api.get<{
+        success: boolean;
+        data: Array<{
+          date: string;
+          calls: number;
+          completed: number;
+          bookings: number;
+          revenue: number;
+        }>;
+      }>('/analytics/trends/daily?period=7'),
   });
 
   if (isLoading) {
@@ -50,18 +60,18 @@ export function CallVolumeChart() {
     datasets: [
       {
         label: 'Calls',
-        data: last7Days.map(date => {
-          const dayData = trends.find((t: any) => t.date === date);
-          return dayData?.calls || 0;
+        data: last7Days.map((date) => {
+          const dayData = trends.find((t) => t.date === date);
+          return dayData?.calls ?? 0;
         }),
         backgroundColor: 'rgba(14, 165, 233, 0.8)',
         borderRadius: 4,
       },
       {
         label: 'Bookings',
-        data: last7Days.map(date => {
-          const dayData = trends.find((t: any) => t.date === date);
-          return dayData?.bookings || 0;
+        data: last7Days.map((date) => {
+          const dayData = trends.find((t) => t.date === date);
+          return dayData?.bookings ?? 0;
         }),
         backgroundColor: 'rgba(34, 197, 94, 0.8)',
         borderRadius: 4,

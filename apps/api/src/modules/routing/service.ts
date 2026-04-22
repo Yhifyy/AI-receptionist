@@ -72,7 +72,7 @@ export class RoutingService {
     }
 
     // Returning customer with history
-    if (customer && customer.callCount > 0) {
+    if (customer && (customer.callCount ?? 0) > 0) {
       // Check recent call sentiment
       if (customer.previousCalls.length > 0) {
         const recentSentiment = customer.previousCalls

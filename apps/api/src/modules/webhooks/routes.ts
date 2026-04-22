@@ -8,12 +8,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 });
 
 export async function registerWebhookRoutes(fastify: FastifyInstance) {
-  // Stripe webhook
-  fastify.post('/stripe', {
-    config: {
-      rawBody: true,
-    },
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  // Stripe webhook (raw body for signature verification — set by a content-type parser or proxy)
+  fastify.post(
+    '/stripe',
+    {
+      config: { rawBody: true },
+    } as any,
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const sig = request.headers['stripe-signature'] as string;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -65,7 +66,8 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     }
 
     return { received: true };
-  });
+    }
+  );
 
   // n8n webhook endpoint
   fastify.post('/n8n/:tenantId/:action', async (request: FastifyRequest, reply: FastifyReply) => {

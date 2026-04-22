@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { logger } from './logger.js';
 
 let redisClient: Redis | null = null;
@@ -12,7 +12,7 @@ export function createRedisClient(): Redis {
   
   redisClient = new Redis(redisUrl, {
     maxRetriesPerRequest: 3,
-    retryStrategy(times) {
+    retryStrategy(times: number) {
       const delay = Math.min(times * 50, 2000);
       return delay;
     },

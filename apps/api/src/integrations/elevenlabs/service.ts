@@ -7,6 +7,15 @@ interface VoiceSettings {
   use_speaker_boost?: boolean;
 }
 
+interface Voice {
+  voice_id: string;
+  name: string;
+  category: string;
+  description?: string;
+  labels?: Record<string, string>;
+  preview_url?: string;
+}
+
 export class ElevenLabsService {
   private apiKey: string;
   private voiceId: string;
@@ -145,7 +154,7 @@ export class ElevenLabsService {
       throw new Error(`Failed to fetch voices: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { voices: Voice[] };
     return data.voices;
   }
 
@@ -172,17 +181,8 @@ export class ElevenLabsService {
       throw new Error(`Failed to clone voice: ${response.status}`);
     }
 
-    return response.json();
+    return (await response.json()) as Voice;
   }
-}
-
-interface Voice {
-  voice_id: string;
-  name: string;
-  category: string;
-  description?: string;
-  labels?: Record<string, string>;
-  preview_url?: string;
 }
 
 // Pre-built voices optimized for phone calls

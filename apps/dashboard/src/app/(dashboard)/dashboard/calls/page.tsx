@@ -21,7 +21,12 @@ export default function CallsPage() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['calls', page, statusFilter],
-    queryFn: () => api.get(`/calls?page=${page}&limit=20${statusFilter ? `&status=${statusFilter}` : ''}`),
+    queryFn: () =>
+      api.get<{
+        success: boolean;
+        data: unknown[];
+        meta?: { page: number; limit: number; total: number; totalPages: number };
+      }>(`/calls?page=${page}&limit=20${statusFilter ? `&status=${statusFilter}` : ''}`),
   });
 
   const calls = data?.data || [];

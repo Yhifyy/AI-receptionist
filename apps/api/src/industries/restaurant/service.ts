@@ -23,7 +23,9 @@ export class RestaurantService {
     }
 
     const config = tenant.config as any;
-    const dayName = date.toLocaleDateString('en-US', { weekday: 'lowercase' });
+    const dayName = date
+      .toLocaleDateString('en-US', { weekday: 'long' })
+      .toLowerCase();
     const hours = (tenant.operatingHours as any)?.[dayName];
 
     if (!hours) {

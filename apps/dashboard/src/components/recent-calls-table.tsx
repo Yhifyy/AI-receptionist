@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { PhoneArrowDownLeftIcon, PhoneArrowUpRightIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-interface Call {
+export interface Call {
   id: string;
   direction: 'INBOUND' | 'OUTBOUND';
   fromNumber: string;

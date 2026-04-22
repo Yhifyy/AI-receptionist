@@ -159,13 +159,24 @@ export async function transcribeRecording(audioUrl: string): Promise<{
     throw new Error(`Deepgram API error: ${response.statusText}`);
   }
 
-  const result = await response.json();
+  const result = (await response.json()) as {
+    results?: { channels?: { alternatives?: { transcript?: string; words?: unknown[] }[] }[] };
+    metadata?: { duration?: number };
+  };
   const channel = result.results?.channels?.[0];
   const alternative = channel?.alternatives?.[0];
 
+  const words =
+    (alternative?.words || []) as Array<{
+      word: string;
+      start: number;
+      end: number;
+      confidence: number;
+    }>;
+
   return {
     transcript: alternative?.transcript || '',
-    words: alternative?.words || [],
+    words,
     duration: result.metadata?.duration || 0,
   };
 }

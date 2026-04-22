@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { StatsCard } from '@/components/stats-card';
-import { RecentCallsTable } from '@/components/recent-calls-table';
+import { RecentCallsTable, type Call } from '@/components/recent-calls-table';
 import { CallVolumeChart } from '@/components/call-volume-chart';
 import {
   PhoneIcon,
@@ -12,20 +12,40 @@ import {
   FaceSmileIcon,
 } from '@heroicons/react/24/outline';
 
+type OverviewStats = {
+  calls?: { total?: number; completionRate?: number };
+  bookings?: { total?: number; conversionRate?: number };
+  revenue?: { attributed?: number };
+  satisfaction?: { averageSentiment?: number };
+};
+
+type UsagePayload = {
+  minutesUsed: number;
+  minutesIncluded: number;
+  usagePercent: number;
+  minutesRemaining: number;
+  plan: string;
+};
+
 export default function DashboardPage() {
   const { data: overview, isLoading } = useQuery({
     queryKey: ['analytics', 'overview'],
-    queryFn: () => api.get('/analytics/overview?period=7d'),
+    queryFn: () =>
+      api.get<{ success: boolean; data: OverviewStats }>(
+        '/analytics/overview?period=7d'
+      ),
   });
 
   const { data: recentCalls } = useQuery({
     queryKey: ['calls', 'recent'],
-    queryFn: () => api.get('/calls?limit=5'),
+    queryFn: () =>
+      api.get<{ success: boolean; data: Call[] }>('/calls?limit=5'),
   });
 
   const { data: usage } = useQuery({
     queryKey: ['analytics', 'usage'],
-    queryFn: () => api.get('/analytics/usage'),
+    queryFn: () =>
+      api.get<{ success: boolean; data: UsagePayload }>('/analytics/usage'),
   });
 
   if (isLoading) {
@@ -79,7 +99,9 @@ export default function DashboardPage() {
           value={stats?.satisfaction?.averageSentiment?.toFixed(2) || 'N/A'}
           change="Customer satisfaction"
           icon={FaceSmileIcon}
-          trend={stats?.satisfaction?.averageSentiment > 0 ? 'up' : 'down'}
+          trend={
+            (stats?.satisfaction?.averageSentiment ?? 0) > 0 ? 'up' : 'down'
+          }
         />
       </div>
 

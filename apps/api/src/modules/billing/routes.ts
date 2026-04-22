@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { prisma } from '@voicedesk/database';
 import { billingService, PLANS } from './service.js';
 import { UnauthorizedError, ForbiddenError } from '../../shared/errors.js';
 
@@ -37,7 +38,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
   fastify.get('/subscription', async (request: FastifyRequest, reply: FastifyReply) => {
     const { tenantId } = request.user as any;
 
-    const tenant = await fastify.prisma.tenant.findUnique({
+    const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {
         plan: true,

@@ -27,7 +27,7 @@ async function main() {
       name: 'Demo Italian Kitchen',
       industry: 'RESTAURANT',
       subdomain: 'mvp-demo',
-      plan: 'PROFESSIONAL',
+      plan: 'PRO',
       timezone: 'America/New_York',
       twilioNumber: process.env.TWILIO_PHONE_NUMBER || '+15551234567',
       voiceId: process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
@@ -64,7 +64,12 @@ async function main() {
   // Create admin user for the tenant
   const passwordHash = hashPassword('admin123');
   const user = await prisma.user.upsert({
-    where: { email: 'admin@demo-restaurant.com' },
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: 'admin@demo-restaurant.com',
+      },
+    },
     update: {},
     create: {
       email: 'admin@demo-restaurant.com',

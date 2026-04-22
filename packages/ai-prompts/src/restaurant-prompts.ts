@@ -123,9 +123,10 @@ export function selectUpsellPrompt(context: ConversationContext): string | null 
   }
 
   // Returning customer with preferences
-  if (context.customer?.preferences?.favoriteDishes?.length > 0) {
+  const favoriteDishes = context.customer?.preferences?.favoriteDishes;
+  if (favoriteDishes && favoriteDishes.length > 0) {
     return UPSELL_PROMPTS.returningCustomer
-      .replace('{previous_favorite}', context.customer.preferences.favoriteDishes[0])
+      .replace('{previous_favorite}', favoriteDishes[0])
       .replace('{related_dish}', 'seasonal special');
   }
 

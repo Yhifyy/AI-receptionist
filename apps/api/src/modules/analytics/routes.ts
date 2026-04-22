@@ -186,17 +186,20 @@ export async function registerAnalyticsRoutes(fastify: FastifyInstance) {
       where: {
         tenantId,
         createdAt: { gte: startDate },
-        intents: { not: null },
       },
       select: { intents: true },
     });
 
+    const callsWithIntents = calls.filter(
+      (c) => c.intents !== null && c.intents !== undefined
+    );
+
     // Aggregate intents
     const intentCounts: Record<string, number> = {};
-    calls.forEach(call => {
+    callsWithIntents.forEach((call) => {
       const intents = call.intents as any[];
       if (Array.isArray(intents)) {
-        intents.forEach(intent => {
+        intents.forEach((intent) => {
           const key = intent.intent || intent;
           intentCounts[key] = (intentCounts[key] || 0) + 1;
         });

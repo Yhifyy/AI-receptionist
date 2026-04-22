@@ -19,25 +19,42 @@ export class ActionExecutor {
     try {
       switch (actionType) {
         case 'check_availability':
-          return await this.checkAvailability(data);
+          return await this.checkAvailability(
+            data as { date: string; time: string; partySize: number }
+          );
 
         case 'create_booking':
           return await this.createBooking(data, context);
 
         case 'modify_booking':
-          return await this.modifyBooking(data);
+          return await this.modifyBooking(
+            data as {
+              bookingId: string;
+              date?: string;
+              time?: string;
+              partySize?: number;
+              specialRequests?: string;
+            }
+          );
 
         case 'cancel_booking':
-          return await this.cancelBooking(data);
+          return await this.cancelBooking(
+            data as { bookingId?: string; phone?: string; date?: string; time?: string }
+          );
 
         case 'get_menu_info':
-          return await this.getMenuInfo(data);
+          return await this.getMenuInfo(
+            data as { query: string; category?: string; dietaryFilter?: string }
+          );
 
         case 'get_operating_hours':
           return await this.getOperatingHours(data);
 
         case 'transfer_to_human':
-          return await this.initiateTransfer(data, context);
+          return await this.initiateTransfer(
+            data as { reason: string; priority?: string; summary?: string },
+            context
+          );
 
         case 'add_to_waitlist':
           return await this.addToWaitlist(data, context);

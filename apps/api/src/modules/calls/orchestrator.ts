@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import { v4 as uuid } from 'uuid';
 import { prisma, type ActionType } from '@voicedesk/database';
 import type { 
@@ -310,7 +310,7 @@ export class CallOrchestrator {
 
     let greeting: string;
 
-    if (customer && customer.name && customer.callCount > 0) {
+    if (customer && customer.name && (customer.callCount ?? 0) > 0) {
       greeting = `Welcome back${customer.name ? ', ' + customer.name : ''}! How can I help you today?`;
     } else {
       greeting = `Thank you for calling ${tenant?.name || 'us'}! How can I help you today?`;

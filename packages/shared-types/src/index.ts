@@ -20,6 +20,8 @@ export interface CustomerContext {
   name: string | null;
   phone: string;
   isVip: boolean;
+  /** Total prior calls; used for greeting / upsell. */
+  callCount?: number;
   preferences: Record<string, any>;
   previousCalls: CallSummary[];
   lifetimeValue: number;

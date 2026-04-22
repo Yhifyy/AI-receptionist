@@ -122,10 +122,15 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   // WebSocket endpoint for real-time call audio (Twilio Media Streams)
   fastify.get('/stream/:callSid', { websocket: true }, async (connection, request) => {
     const { callSid } = request.params as any;
-    
+
     fastify.log.info({ callSid }, 'WebSocket connection for call stream');
 
-    await callOrchestrator.handleMediaStream(connection.socket, callSid);
+    const socket =
+      connection && typeof connection === 'object' && 'socket' in connection
+        ? (connection as { socket: import('ws').WebSocket }).socket
+        : (connection as import('ws').WebSocket);
+
+    await callOrchestrator.handleMediaStream(socket, callSid);
   });
 
   // Twilio incoming call webhook

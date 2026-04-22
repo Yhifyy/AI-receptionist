@@ -116,7 +116,7 @@ export class PineconeService {
         throw new Error(`Pinecone query failed: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as { matches?: QueryResult[] };
       return data.matches || [];
     } catch (error) {
       logger.error({ error }, 'Pinecone query failed');
@@ -193,7 +193,10 @@ export class PineconeService {
         throw new Error(`Pinecone stats failed: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        namespaces?: Record<string, { vectorCount: number }>;
+        totalVectorCount?: number;
+      };
       return {
         namespaces: data.namespaces || {},
         totalVectors: data.totalVectorCount || 0,

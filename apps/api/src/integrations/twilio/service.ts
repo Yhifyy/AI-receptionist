@@ -24,7 +24,6 @@ export class TwilioService {
     connect.stream({
       url: streamUrl,
       statusCallback: `${process.env.API_URL}/api/calls/status`,
-      statusCallbackEvent: ['connected', 'failed'],
     });
 
     // Enable call recording

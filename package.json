@@ -8,6 +8,8 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "dev:api": "turbo run build --filter=@voicedesk/api && pnpm --filter @voicedesk/api dev",
+    "build:api": "turbo run build --filter=@voicedesk/api",
     "build": "turbo run build",
     "start": "turbo run start",
     "lint": "turbo run lint",
